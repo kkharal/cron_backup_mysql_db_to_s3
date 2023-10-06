@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: s3-credentials
+  namespace: mojaloop
+type: Opaque
+data:
+  AWS_ACCESS_KEY_ID: "" #add here your key with  (echo -n "aws_access_key_id" | base64) format
+  AWS_SECRET_ACCESS_KEY: "" #add here your key with  (echo -n "aws_secret_access_key" | base64) format
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: slack-webhook-url
+  namespace: mojaloop
+type: Opaque
+data:
+  SLACK_WEBHOOK_URL: "" #add here your webhook
+---
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: central-ledger-db-backup
+  namespace: mojaloop
+spec:
+  schedule: "30 11 * * Mon-Fri"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: my-database-backup
+            image: kharalk/k8s-mysl-backup-s3:v8
+            imagePullPolicy: Always
+            env:
+              - name: AWS_ACCESS_KEY_ID
+                valueFrom:
+                   secretKeyRef:
+                     name: s3-credentials
+                     key: AWS_ACCESS_KEY_ID
+              - name: AWS_SECRET_ACCESS_KEY
+                valueFrom:
+                   secretKeyRef:
+                     name: s3-credentials
+                     key: AWS_SECRET_ACCESS_KEY
+              - name: AWS_DEFAULT_REGION
+                value: "ap-southeast-1"
+              - name: AWS_BUCKET_NAME
+                value: "sanbox-backup"
+              - name: AWS_BUCKET_BACKUP_PATH
+                value: "/test/central-ledger"
+              - name: TARGET_DATABASE_HOST
+                value: "central-ledger-db-svc.stateful-services.svc.cluster.local"
+              - name: TARGET_DATABASE_PORT
+                value: "3306"
+              - name: TARGET_DATABASE_NAMES
+                value: "central_ledger"
+              - name: TARGET_DATABASE_USER
+                value: "central_ledger"
+              - name: TARGET_DATABASE_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: mysql-central-ledger-secret
+                    key: mysql-password
+              - name: SLACK_ENABLED
+                value: "true"
+              - name: SLACK_USERNAME
+                value: "test-wynepay-healthcheck"
+              - name: SLACK_CHANNEL
+                value: "#test-wynepay-healthcheck"
+              - name: SLACK_WEBHOOK_URL
+                valueFrom:
+                   secretKeyRef:
+                     name: slack-webhook-url
+                     key: SLACK_WEBHOOK_URL
+          restartPolicy: Never
